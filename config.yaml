@@ -1,4 +1,10 @@
 redirects:
-  facebook: http://www.facebook.com
-  google: http://www.google.com
-  twitter: http://www.twitter.com
+  facebook:
+    url: http://www.facebook.com
+    used: 2
+  google:
+    url: http://www.google.com
+    used: 0
+  twitter:
+    url: www.twitter.com
+    used: 0

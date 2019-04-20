@@ -16,7 +16,12 @@ const FILE_NAME = "config.yaml"
 const DEFAULT_PORT = 8080
 
 type Config struct {
-	Redirects map[string]string `yaml:"redirects"`
+	Redirects map[string]UrlInfo `yaml:"redirects"`
+}
+
+type UrlInfo struct {
+	Url  string `yaml:"url"`
+	Used int64  `yaml:"used"`
 }
 
 type Redirect struct {
@@ -82,9 +87,10 @@ func readYamlFile() Config {
 
 func setRedirectHandler(config Config) {
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path[1:]
-		if value, ok := config.Redirects[path]; ok {
-			http.Redirect(w, r, value, http.StatusMovedPermanently)
+		key := r.URL.Path[1:]
+		if urlInfo, ok := config.Redirects[key]; ok {
+			config.increaseUsedTimes(key)
+			http.Redirect(w, r, urlInfo.Url, http.StatusMovedPermanently)
 		}
 	}
 	http.HandleFunc("/", handler)
@@ -98,7 +104,10 @@ func startServer(portNumber int64) {
 
 func (config Config) appendRedirect(newRedirect Redirect) {
 	if newRedirect.valid() {
-		config.Redirects[newRedirect.Value] = newRedirect.URL
+		if config.Redirects == nil {
+			config.Redirects = map[string]UrlInfo{}
+		}
+		config.Redirects[newRedirect.Value] = UrlInfo{newRedirect.URL, 0}
 		config.saveToYamlFile()
 		fmt.Printf("%s is appended to config file!", newRedirect.displayValue())
 	} else {
@@ -107,11 +116,18 @@ func (config Config) appendRedirect(newRedirect Redirect) {
 	}
 }
 
+func (config Config) increaseUsedTimes(key string) {
+	urlInfo := config.Redirects[key]
+	urlInfo.Used += 1
+	config.Redirects[key] = urlInfo
+	config.saveToYamlFile()
+}
+
 func (config Config) printAllRedirects() {
 	fmt.Println("Redirection list:")
-	for value, url := range config.Redirects {
-		redirect := Redirect{value, url}
-		fmt.Println(redirect.displayValue())
+	for value, urlInfo := range config.Redirects {
+		redirect := Redirect{value, urlInfo.Url}
+		fmt.Printf("%s - Used: %d \n", redirect.displayValue(), urlInfo.Used)
 	}
 }
 
