@@ -13,8 +13,7 @@ import (
 const CONFIGURE_COMMAND = "configure"
 const RUN_COMMAND = "run"
 const FILE_NAME = "config.yaml"
-
-type PortNumber int64
+const DEFAULT_PORT = 8080
 
 type Config struct {
 	Redirects map[string]string `yaml:"redirects"`
@@ -32,10 +31,8 @@ func main() {
 	configure := flag.NewFlagSet(CONFIGURE_COMMAND, flag.ExitOnError)
 	appendValue := configure.String("a", "", "Append to redirection list")
 	url := configure.String("u", "", "URL")
-
 	run := flag.NewFlagSet(RUN_COMMAND, flag.ExitOnError)
-	portNumber := run.Int64("p", 8080, "Port number")
-
+	portNumber := run.Int64("p", DEFAULT_PORT, "Port number")
 	deleteValue := flag.String("d", "", "Delete from redirection list")
 	list := flag.Bool("l", false, "List redirection list")
 	help := flag.Bool("h", false, "Print usage info")
@@ -44,9 +41,7 @@ func main() {
 		printUsageInfo()
 		os.Exit(-1)
 	}
-
 	config := readYamlFile()
-
 	subCommand := os.Args[1]
 	subCommandArg := os.Args[2:]
 	switch subCommand {
@@ -58,6 +53,7 @@ func main() {
 	case RUN_COMMAND:
 		err := run.Parse(subCommandArg)
 		checkError(err)
+		setRedirectHandler(config)
 		startServer(*portNumber)
 	default:
 		flag.Parse()
@@ -75,35 +71,6 @@ func main() {
 	}
 }
 
-func printUsageInfo() {
-	usage := "Usage:\n" +
-		"        ./urlshorten <command> [option]\n" +
-		"The commands are:\n" +
-		"        configure  configure yaml config file\n" +
-		"        run        run server\n" +
-		"The options are:\n" +
-		"        -a         append to redirection list\n" +
-		"        -u         URL\n" +
-		"        -d         delete from redirection list\n" +
-		"        -p         port number\n" +
-		"        -l         usage info\n"
-	flag.Usage = func() {
-		_, err := fmt.Fprintf(os.Stderr, usage)
-		checkError(err)
-	}
-	flag.Usage()
-}
-
-func startServer(portNumber int64) {
-	port := PortNumber(portNumber).toString()
-	fmt.Printf("Server is running on port: %d", portNumber)
-	log.Fatal(http.ListenAndServe(port, nil))
-}
-
-func (p PortNumber) toString() string {
-	return fmt.Sprintf(":%d", p)
-}
-
 func readYamlFile() Config {
 	config := Config{}
 	yamlFile, err := ioutil.ReadFile(FILE_NAME)
@@ -111,6 +78,22 @@ func readYamlFile() Config {
 	err = yaml.Unmarshal(yamlFile, &config)
 	checkError(err)
 	return config
+}
+
+func setRedirectHandler(config Config) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path[1:]
+		if value, ok := config.Redirects[path]; ok {
+			http.Redirect(w, r, value, http.StatusMovedPermanently)
+		}
+	}
+	http.HandleFunc("/", handler)
+}
+
+func startServer(portNumber int64) {
+	fmt.Printf("Server is running on port: %d", portNumber)
+	port := fmt.Sprintf(":%d", portNumber)
+	log.Fatal(http.ListenAndServe(port, nil))
 }
 
 func (config Config) appendRedirect(newRedirect Redirect) {
@@ -124,21 +107,12 @@ func (config Config) appendRedirect(newRedirect Redirect) {
 	}
 }
 
-func (redirect Redirect) valid() bool {
-	return redirect.Value != "" && redirect.URL != ""
-}
-
 func (config Config) printAllRedirects() {
 	fmt.Println("Redirection list:")
 	for value, url := range config.Redirects {
 		redirect := Redirect{value, url}
 		fmt.Println(redirect.displayValue())
 	}
-}
-
-func (redirect Redirect) displayValue() string {
-	format := "Value: %s - URL: %s"
-	return fmt.Sprintf(format, redirect.Value, redirect.URL)
 }
 
 func (config Config) deleteRedirect(deleteValue string) {
@@ -152,6 +126,34 @@ func (config Config) saveToYamlFile() {
 	checkError(err)
 	err = ioutil.WriteFile(FILE_NAME, changed, 0644)
 	checkError(err)
+}
+
+func (redirect Redirect) valid() bool {
+	return redirect.Value != "" && redirect.URL != ""
+}
+
+func (redirect Redirect) displayValue() string {
+	format := "Value: %s - URL: %s"
+	return fmt.Sprintf(format, redirect.Value, redirect.URL)
+}
+
+func printUsageInfo() {
+	usageInfo := "Usage:\n" +
+		"        ./urlshorten <command> [option]\n" +
+		"The commands are:\n" +
+		"        configure  configure yaml config file\n" +
+		"        run        run server\n" +
+		"The options are:\n" +
+		"        -a         append to redirection list\n" +
+		"        -u         URL\n" +
+		"        -d         delete from redirection list\n" +
+		"        -p         port number\n" +
+		"        -l         usage info\n"
+	flag.Usage = func() {
+		_, err := fmt.Fprintf(os.Stderr, usageInfo)
+		checkError(err)
+	}
+	flag.Usage()
 }
 
 func isNoCommand() bool {
