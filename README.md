@@ -18,6 +18,6 @@ The list of redirection should be maintained in a command line tool, what can:
 ## Bonus
 As a bonus exercises you can also...
 
-* [ ] Track number of times each redirection is used. When the user uses urlshorten -l, the user should see redirections ranked by how many times they have been used.
-* [ ] Provide a default shortening, if no example is given. For example, if dogs is not given, generate a random alphanumeric string of length 8.
+* [x] Track number of times each redirection is used. When the user uses urlshorten -l, the user should see redirections ranked by how many times they have been used.
+* [x] Provide a default shortening, if no example is given. For example, if dogs is not given, generate a random alphanumeric string of length 8.
 * [ ] Build a Handler that doesn't read from a map but instead reads from a database. Whether you use BoltDB, SQL, or something else is entirely up to you.
