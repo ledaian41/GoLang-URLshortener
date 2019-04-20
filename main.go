@@ -6,14 +6,17 @@ import (
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
+	"time"
 )
 
 const CONFIGURE_COMMAND = "configure"
 const RUN_COMMAND = "run"
 const FILE_NAME = "config.yaml"
 const DEFAULT_PORT = 8080
+const LETTER_BYTES = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 type Config struct {
 	Redirects map[string]UrlInfo `yaml:"redirects"`
@@ -22,11 +25,6 @@ type Config struct {
 type UrlInfo struct {
 	Url  string `yaml:"url"`
 	Used int64  `yaml:"used"`
-}
-
-type Redirect struct {
-	Value string `yaml:"value"`
-	URL   string `yaml:"url"`
 }
 
 func main() {
@@ -43,8 +41,8 @@ func main() {
 	help := flag.Bool("h", false, "Print usage info")
 
 	if isNoCommand() {
-		printUsageInfo()
-		os.Exit(-1)
+		fmt.Println("Exit")
+		os.Exit(1)
 	}
 	config := readYamlFile()
 	subCommand := os.Args[1]
@@ -53,8 +51,8 @@ func main() {
 	case CONFIGURE_COMMAND:
 		err := configure.Parse(subCommandArg)
 		checkError(err)
-		newRedirect := Redirect{*appendValue, *url}
-		config.appendRedirect(newRedirect)
+		err = config.appendRedirect(*appendValue, *url)
+		checkError(err)
 	case RUN_COMMAND:
 		err := run.Parse(subCommandArg)
 		checkError(err)
@@ -102,18 +100,23 @@ func startServer(portNumber int64) {
 	log.Fatal(http.ListenAndServe(port, nil))
 }
 
-func (config Config) appendRedirect(newRedirect Redirect) {
-	if newRedirect.valid() {
+func (config Config) appendRedirect(value string, url string) error {
+	var err error = nil
+	if url != "" {
+		key := value
+		if value == "" {
+			key = randString(8)
+		}
 		if config.Redirects == nil {
 			config.Redirects = map[string]UrlInfo{}
 		}
-		config.Redirects[newRedirect.Value] = UrlInfo{newRedirect.URL, 0}
+		config.Redirects[key] = UrlInfo{url, 0}
 		config.saveToYamlFile()
-		fmt.Printf("%s is appended to config file!", newRedirect.displayValue())
+		fmt.Printf("Value: %s - URL: %s is appended to config file!", key, url)
 	} else {
-		printUsageInfo()
-		os.Exit(-1)
+		err = fmt.Errorf("missing url")
 	}
+	return err
 }
 
 func (config Config) increaseUsedTimes(key string) {
@@ -126,15 +129,18 @@ func (config Config) increaseUsedTimes(key string) {
 func (config Config) printAllRedirects() {
 	fmt.Println("Redirection list:")
 	for value, urlInfo := range config.Redirects {
-		redirect := Redirect{value, urlInfo.Url}
-		fmt.Printf("%s - Used: %d \n", redirect.displayValue(), urlInfo.Used)
+		fmt.Printf("Value: %s - URL: %s - Used: %d \n", value, urlInfo.Url, urlInfo.Used)
 	}
 }
 
 func (config Config) deleteRedirect(deleteValue string) {
-	delete(config.Redirects, deleteValue)
-	config.saveToYamlFile()
-	fmt.Printf("%s is deleted from config file!", deleteValue)
+	if _, ok := config.Redirects[deleteValue]; ok {
+		delete(config.Redirects, deleteValue)
+		config.saveToYamlFile()
+		fmt.Printf("%s is deleted from config file!", deleteValue)
+	} else {
+		fmt.Printf("%s is not found in config file!", deleteValue)
+	}
 }
 
 func (config Config) saveToYamlFile() {
@@ -144,15 +150,6 @@ func (config Config) saveToYamlFile() {
 	checkError(err)
 }
 
-func (redirect Redirect) valid() bool {
-	return redirect.Value != "" && redirect.URL != ""
-}
-
-func (redirect Redirect) displayValue() string {
-	format := "Value: %s - URL: %s"
-	return fmt.Sprintf(format, redirect.Value, redirect.URL)
-}
-
 func printUsageInfo() {
 	usageInfo := "Usage:\n" +
 		"        ./urlshorten <command> [option]\n" +
@@ -160,16 +157,27 @@ func printUsageInfo() {
 		"        configure  configure yaml config file\n" +
 		"        run        run server\n" +
 		"The options are:\n" +
-		"        -a         append to redirection list\n" +
-		"        -u         URL\n" +
-		"        -d         delete from redirection list\n" +
+		"        -a         append value to redirection list\n" +
+		"        -u         url is appended to direction list\n" +
+		"        -d         delete value from redirection list\n" +
 		"        -p         port number\n" +
-		"        -l         usage info\n"
+		"        -l         list all redirection\n" +
+		"        -h         usage info\n"
 	flag.Usage = func() {
 		_, err := fmt.Fprintf(os.Stderr, usageInfo)
 		checkError(err)
 	}
 	flag.Usage()
+}
+
+func randString(length int) string {
+	rand.Seed(time.Now().UnixNano())
+	b := make([]byte, length)
+	l := len(LETTER_BYTES)
+	for i := range b {
+		b[i] = LETTER_BYTES[rand.Intn(l)]
+	}
+	return string(b)
 }
 
 func isNoCommand() bool {
